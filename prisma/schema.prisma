@@ -1,0 +1,41 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "sqlite"
+    url      = env("DATABASE_URL")
+}
+
+model Post {
+    id        Int      @id @default(autoincrement())
+    name      String
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([name])
+}
+
+model Prompt {
+    id      String @id @default(cuid())
+    content String
+}
+
+model Task {
+    id       String @id @default(cuid())
+    name     String
+    freq     Int
+    duration Int
+}
+
+model Event {
+    id        String   @id @default(cuid())
+    name      String
+    startTime String
+    endTime   String
+    eventId   String   @unique
+    // isGenerated Boolean 
+}
