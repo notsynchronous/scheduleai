@@ -65,7 +65,7 @@ const ContextProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateEventState = (newState: CalendarEvent[]) => {
-    setEvents([...newState]);
+    setEvents((prevState) => ([...prevState, ...newState]));
   };
 
   return (

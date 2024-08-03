@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import key from "creds.json"; // Import your service account key JSON file
-import { startOfWeek, endOfWeek } from "date-fns";
+import { startOfWeek, endOfWeek, parseJSON, formatRFC3339 } from "date-fns";
+import { type Event } from "types";
 
 // Define the scope for the calendar API
 const SCOPES = ["https://www.googleapis.com/auth/calendar"];
@@ -16,33 +17,32 @@ const auth = new google.auth.JWT({
 const calendar = google.calendar({ version: "v3", auth });
 
 // Example: Create events on the user's calendar
-export async function createEvents() {
-  // try {
-  //   const event = {
-  //     summary: "New Event", // Event summary/title
-  //     description: "Description of the event",
-  //     start: {
-  //       dateTime: "2023-12-25T10:00:00", // Start time of the event
-  //       timeZone: "Your-Time-Zone", // Set your desired timezone
-  //     },
-  //     end: {
-  //       dateTime: "2023-12-25T12:00:00", // End time of the event
-  //       timeZone: "Your-Time-Zone", // Set your desired timezone
-  //     },
-  //   };
-
-  //   const response = await calendar.events.insert({
-  //     calendarId: "primary", // Calendar ID where the event will be added
-  //     resource: event,
-  //   });
-
-  //   console.log("Event created:", response.data);
-  //   return response.data;
-  // } catch (error) {
-  //   console.error("Error:", error);
-  //   throw error;
-  // }
-}
+export const createEvent = async (event: Event) => {
+    if (!event.startTime || !event.endTime || !event.name) return;
+    try {
+      const e = {
+        summary: event.name, // Event summary/title
+        start: {
+          dateTime: formatRFC3339(parseJSON(event.startTime)), // Start time of the event
+          timeZone: "America/New_York", // Set your desired timezone
+        },
+        end: {
+          dateTime: formatRFC3339(parseJSON(event.endTime)), // End time of the event
+          timeZone: "America/New_York", // Set your desired timezone
+        },
+      };
+      const response = await calendar.events.insert({
+        calendarId: process.env.GOOGLE_CALENDAR_ID,
+        requestBody: {
+          ...e
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error("Error:", error);
+      throw error;
+    }
+};
 
 // Example: List the user's calendar events
 export async function listEvents() {

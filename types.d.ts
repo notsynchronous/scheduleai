@@ -4,7 +4,15 @@ type CalendarEvent = {
   startTime: string;
   endTime: string;
   eventId: string;
+  isGenerated?: boolean;
 };
+
+type Event = {
+  name: string;
+  startTime: string;
+  endTime: string;
+};
+
 
 type Task = {
   name: string;
@@ -14,4 +22,4 @@ type Task = {
 };
 
 
-export { CalendarEvent, Task };
+export { CalendarEvent, Task, Event };

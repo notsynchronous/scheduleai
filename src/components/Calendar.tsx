@@ -1,4 +1,11 @@
-import { Fragment, useEffect, useRef, useState, useContext } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  useContext,
+  useMemo,
+} from "react";
 import { api } from "@/utils/api";
 
 // Components
@@ -27,7 +34,7 @@ function classNames(...classes: string[]) {
 }
 
 const generateSpan = (dateL: string, dateR: string) => {
-  return String((differenceInMinutes(parseJSON(dateL), parseJSON(dateR)) / 5))
+  return String(differenceInMinutes(parseJSON(dateL), parseJSON(dateR)) / 5);
 };
 
 // TODO: Column funkiness with sm modifier
@@ -69,41 +76,47 @@ const getTheStartOfTheWeek = (date: Date) => {
   return date.getDate() - date.getDay();
 };
 
-const generatePrompt = (tasks: Task[], events: CalendarEvent[], hours: string) => {
+const generatePrompt = (
+  tasks: Task[],
+  events: CalendarEvent[],
+  hours: string,
+) => {
   const taskString = tasks
     .map(
       (task) =>
         `- A "${task.name}" task happens ${task.freq} times for ${task.duration} minutes.\n`,
     )
     .join("");
-  
-    // ONLY USE EVENTS FROM THIS WEEK
-    const eventString = events
+
+  // ONLY USE EVENTS FROM THIS WEEK
+  const eventString = events
     .map(
       (event) =>
-        `- A "${event.name}" task happens at ${format(parseJSON(event.startTime), 'PPpp')} til ${format(parseJSON(event.endTime), 'PPpp')}\n`,
+        !event.isGenerated &&
+        `- An event, "${event.name}", happens from ${format(
+          parseJSON(event.startTime),
+          "PPpp",
+        )} to ${format(parseJSON(event.endTime), "PPpp")}. Don't overwrite.\n`,
     )
     .join("");
 
-  return `I need a schedule for the rest of the week of ${startOfWeek(
+  return `I need a schedule for the rest of the week starting on ${format(
     new Date(),
-  ).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })} with the following information:
+    "PPpp",
+  )} with the following information:
 
+  - All tasks can happen between 9AM and 5PM UTC -5.
+  ${
+    eventString
+      ? "  - There are existing events that need to be excluded in the output but respected, they are as followed: \n" +
+        eventString
+      : ""
+  }
 
-  - All events happen between 9AM and 5PM UTC -5.
-  - Nothing should be planned for Tuesday.
-  - There should be 30 minutes a least between events.
-  - There are existing events that should not be overwritten.
-
-  ${eventString}
+  - Create events for the following tasks based on earlier rules and there should be at least 30 minutes between events created:
+  ${taskString}
   
-  - Formatted like this: schedule: [{ name: "", startTime: "YYYY-MM-DDTHH:mm:ss.sssZ", endTime: "startTime + duration as YYYY-MM-DDTHH:mm:ss.sssZ", duration: "15" }] 
-
-  ${taskString}`;
+  - Format the schedule like this: schedule: [{ name: "", startTime: "YYYY-MM-DDTHH:mm:ss.sssZ", endTime: "startTime + duration as YYYY-MM-DDTHH:mm:ss.sssZ", duration: "15" }]`;
 };
 
 const generateColorClasses = () => {
@@ -128,7 +141,6 @@ const getRandomBgColorBody = () => {
   );
 };
 
- 
 const generateTheWeek = (date: Date) => {
   const days = DAYS_OF_THE_WEEK.map((curDay, i) => {
     const day = new Date(date);
@@ -294,6 +306,7 @@ interface ParsedContent {
 }
 
 const WeekView = ({}) => {
+
   const [weekStart, setWeekStart] = useState<Date>(new Date());
   // const [globalEvents, setGlobalEvents] = useState(EVENTS);
   const {
@@ -303,13 +316,48 @@ const WeekView = ({}) => {
     updateEventState: setGlobalEvents,
   } = useContext(MyContext);
   const [isTaskEditOpen, setIsTaskEditOpen] = useState(false);
+
+  const renderedEvents = useMemo(() => {
+    return globalEvents.map(
+      (event, i) =>
+        isSameWeek(weekStart, parseJSON(event.startTime)) && (
+          <li
+            key={event.name + i + "_"}
+            style={{
+              gridRow: `${
+                parseJSON(event.startTime).getHours() * 12 +
+                Math.floor(parseJSON(event.startTime).getMinutes() / 5) +
+                2
+              } / span ${generateSpan(event.endTime, event.startTime)}`,
+            }}
+            className={classNames(generateColumn(event.startTime))}
+          >
+            <a href="#" className={getRandomBgColorBody()}>
+              <p className="order-1 font-semibold">{event.name}</p>
+              <p>
+                <time
+                  dateTime={format(new Date(event.startTime), "yyyy-MM-dd")}
+                >
+                  {format(parseJSON(event.startTime), "h:mm a")}
+                </time>
+              </p>
+            </a>
+          </li>
+        ),
+    );
+  }, [globalEvents, weekStart]);
+
+  //
   const chat = api.ai.create.useMutation({
     onSuccess: (data: ParsedContent) => {
       const content = data.content;
       const { schedule }: Schedule = JSON.parse(content) as Schedule;
-      setGlobalEvents(schedule);
+      const ns = schedule.map((item) => ({ ...item, isGenerated: true }));
+      setGlobalEvents(ns);
     },
   });
+
+  const eventCreate = api.event.create.useMutation({});
 
   const container = useRef(null);
   const containerNav = useRef(null);
@@ -317,8 +365,6 @@ const WeekView = ({}) => {
 
   // Fires AFTER initial render
   useEffect(() => {
-
-
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(getTheStartOfTheWeek(today)); // Start of the current week (Sunday)
@@ -327,7 +373,6 @@ const WeekView = ({}) => {
   }, []);
 
   useEffect(() => {
-
     // Set the container scroll position based on the current time.
     const currentMinute = new Date().getHours() * 60;
     // container.current.scrollTop =
@@ -339,7 +384,7 @@ const WeekView = ({}) => {
   }, []);
 
   return (
-    <div className="flex h-full flex-col h-full">
+    <div className="flex h-full h-full flex-col">
       {isTaskEditOpen && (
         <TaskCreateModal
           open={isTaskEditOpen}
@@ -468,7 +513,9 @@ const WeekView = ({}) => {
 
             <button
               onClick={() => {
-                chat.mutate({ prompt: generatePrompt(tasks, globalEvents, "") });
+                chat.mutate({
+                  prompt: generatePrompt(tasks, globalEvents, ""),
+                });
                 // alert(generatePrompt());
               }}
               type="button"
@@ -479,7 +526,9 @@ const WeekView = ({}) => {
             {/* EVENT */}
             <button
               onClick={() => {
-                console.log()
+                eventCreate.mutate({
+                  events: globalEvents.filter((event) => event.isGenerated),
+                });
               }}
               type="button"
               className="ml-3 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
@@ -605,7 +654,7 @@ const WeekView = ({}) => {
           </Menu>
         </div>
       </header>
-      <div className="flex flex-row divide-x h-full">
+      <div className="flex h-full flex-row divide-x">
         <div
           ref={container}
           className="isolate flex flex-auto flex-col overflow-auto bg-white"
@@ -818,37 +867,7 @@ const WeekView = ({}) => {
                   }}
                 >
                   {/* (12 * ) + 2, Find minutes * /5 = span */}
-                  {globalEvents.map(
-                    (event, i) =>
-                      isSameWeek(weekStart, parseJSON(event.startTime)) && (
-                        <li
-                          key={event.name + i + "_"}
-                          style={{
-                            gridRow: `${(parseJSON(event.startTime).getHours() * 12) + 2} / span ${generateSpan(event.endTime, event.startTime)}`,
-                          }}
-                          className={classNames(
-                            generateColumn(event.startTime),
-                          )}
-                        >
-                          {/* (new Date(event.startTime).getMinutes() > 0 ? new Date(event.startTime).getMinutes() / 5 : 0) + */}
-                          <a href="#" className={getRandomBgColorBody()}>
-                            <p className="order-1 font-semibold">
-                              {event.name}
-                            </p>
-                            <p>
-                              <time
-                                dateTime={format(
-                                  new Date(event.startTime),
-                                  "yyyy-MM-dd",
-                                )}
-                              >
-                                {format(parseJSON(event.startTime), "h:mm a")}
-                              </time>
-                            </p>
-                          </a>
-                        </li>
-                      ),
-                  )}
+                  {renderedEvents}
                   {/* Column is based on day of the week. Row is..  */}
                   {/* The board is divided by 5 (30 min = 6 span , 1 span = 5 minutes) */}
                 </ol>
@@ -865,10 +884,10 @@ const WeekView = ({}) => {
             values={tasks}
             onReorder={setTasks}
           >
-            {tasks.map((item, i) => (
+            {tasks.map((item) => (
               <Reorder.Item
                 className="flex flex-col overflow-hidden rounded-lg bg-white px-3 py-2 shadow-[0px_2px_3px_-1px_rgba(0,0,0,0.1),0px_1px_0px_0px_rgba(25,28,33,0.02),0px_0px_0px_1px_rgba(25,28,33,0.08)]"
-                key={item.name + "_" + i}
+                key={item.name + "_" + item.freq}
                 value={item}
               >
                 <span className="text-sm ">{item.name}</span>
